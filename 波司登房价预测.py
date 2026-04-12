@@ -79,10 +79,10 @@ if __name__ == "__main__":
     data = preprocessing.normalize(data.T).T
 ##
     train_x, test_x, train_y, test_y = train_test_split(data, label, train_size=0.75, random_state=33)
-    train_x = np.mat(train_x)
-    test_x = np.mat(test_x)
-    train_y = np.mat(train_y).T
-    test_y = np.mat(test_y).T
+    train_x = np.asmatrix(train_x)
+    test_x = np.asmatrix(test_x)
+    train_y = np.asmatrix(train_y).T
+    test_y = np.asmatrix(test_y).T
 
     print(" 运行成功！数据已加载完成")
 
