@@ -59,6 +59,15 @@ if __name__ == "__main__":
     # 1. 加载和预处理数据
     data, label = load_data()
     data = preprocessing.normalize(data.T).T
+<<<<<<< HEAD
+=======
+##
+    train_x, test_x, train_y, test_y = train_test_split(data, label, train_size=0.75, random_state=33)
+    train_x = np.asmatrix(train_x)
+    test_x = np.asmatrix(test_x)
+    train_y = np.asmatrix(train_y).T
+    test_y = np.asmatrix(test_y).T
+>>>>>>> 931e47b1686898f74adf34b1b3fbd538f8e22128
 
     # 划分训练集和测试集
     X_train, X_test, y_train, y_test = train_test_split(
