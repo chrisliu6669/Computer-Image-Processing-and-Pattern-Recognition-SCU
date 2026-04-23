@@ -3,8 +3,8 @@ import os
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 import matplotlib
 
-matplotlib.use('TkAgg')  # 如果安装了 tkinter
-# matplotlib.use('Qt5Agg')  # 如果安装了 PyQt5
+matplotlib.use('TkAgg')
+
 
 import torch
 import torchvision
