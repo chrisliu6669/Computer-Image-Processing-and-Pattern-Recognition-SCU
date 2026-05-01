@@ -8,6 +8,57 @@ from torch.utils.data import DataLoader
 
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
+# ===================== 精简 CNN + GRU + 多层全连接 =====================
+class CNN_GRU_Net(nn.Module):
+    def __init__(self, gru_input_size, hidden_size, num_layers, num_classes):
+        super(CNN_GRU_Net, self).__init__()
+
+        # ===================== 精简 CNN（层数大幅减少） =====================
+        self.conv1 = nn.Conv2d(3, 32, 3, padding=1)
+        self.pool1 = nn.MaxPool2d(2, 2)
+
+        self.conv2 = nn.Conv2d(32, 64, 3, padding=1)
+        self.pool2 = nn.MaxPool2d(2, 2)
+
+        self.conv3 = nn.Conv2d(64, 128, 3, padding=1)
+        # ====================================================================
+
+        # GRU
+        self.gru = nn.GRU(gru_input_size, hidden_size, num_layers, batch_first=True)
+
+        # 多层全连接
+        self.fc1 = nn.Linear(hidden_size, 16)
+        self.fc2 = nn.Linear(16, 32)
+        self.fc3 = nn.Linear(32, 16)
+        self.fc4 = nn.Linear(16, num_classes)
+
+    def forward(self, x):
+        # 精简 CNN 前向
+        x = torch.relu(self.conv1(x))
+        x = self.pool1(x)
+
+        x = torch.relu(self.conv2(x))
+        x = self.pool2(x)
+
+        x = torch.relu(self.conv3(x))  # 输出 [B, 128, 8, 8]
+
+        # 转成 GRU 格式 [B, 8, 128]
+        B, C, H, W = x.shape
+        x = x.permute(0, 2, 1, 3).reshape(B, H, -1)
+
+        # GRU
+        out, _ = self.gru(x)
+        x = out[:, -1, :]
+
+        # 多层全连接
+        x = torch.relu(self.fc1(x))
+        x = torch.relu(self.fc2(x))
+        x = torch.relu(self.fc3(x))
+        x = self.fc4(x)
+
+        return x
+
+# ======================================================================
 
 def main():
     print("正在加载数据集...")
@@ -17,87 +68,31 @@ def main():
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
     ])
 
-    # 训练集
-    trainset = torchvision.datasets.CIFAR10(
-        root='./data', train=True, download=True, transform=transform
-    )
-    trainloader = DataLoader(trainset, batch_size=64, shuffle=True, num_workers=2)
+    trainset = torchvision.datasets.CIFAR10(root='./data', train=True, download=True, transform=transform)
+    testset = torchvision.datasets.CIFAR10(root='./data', train=False, download=True, transform=transform)
 
-    # 测试集
-    testset = torchvision.datasets.CIFAR10(
-        root='./data', train=False, download=True, transform=transform
-    )
+    trainloader = DataLoader(trainset, batch_size=64, shuffle=True, num_workers=2)
     testloader = DataLoader(testset, batch_size=64, shuffle=False, num_workers=2)
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"使用设备: {device}")
 
+    # ===================== 超参数 =====================
+    gru_input_size = 128 * 8  # 对应精简CNN
+    hidden_size = 8
+    num_layers = 1
+    num_classes = 10
+    num_epochs = 20
+    lr = 0.0005
 
-    class SimpleCNN(nn.Module):
-        def __init__(self):
-            super(SimpleCNN, self).__init__()
-
-            # 第 1~3 层卷积
-            self.conv1 = nn.Conv2d(3, 32, 3, padding=1)
-            self.conv2 = nn.Conv2d(32, 32, 3, padding=1)
-            self.conv3 = nn.Conv2d(32, 32, 3, padding=1)
-            self.pool1 = nn.MaxPool2d(2, 2)
-
-            # 第 4~6 层卷积
-            self.conv4 = nn.Conv2d(32, 64, 3, padding=1)
-            self.conv5 = nn.Conv2d(64, 64, 3, padding=1)
-            self.conv6 = nn.Conv2d(64, 64, 3, padding=1)
-            self.pool2 = nn.MaxPool2d(2, 2)
-
-            # 第 7~10 层卷积
-            self.conv7 = nn.Conv2d(64, 128, 3, padding=1)
-            self.conv8 = nn.Conv2d(128, 128, 3, padding=1)
-            self.conv9 = nn.Conv2d(128, 128, 3, padding=1)
-            self.conv10 = nn.Conv2d(128, 256, 3, padding=1)
-
-            # 全连接层
-            self.fc1 = nn.Linear(256 * 8 * 8, 256)
-            self.fc2 = nn.Linear(256, 10)
-
-        def forward(self, x):
-            # 1-3层 + 池化
-            x = torch.relu(self.conv1(x))
-            x = torch.relu(self.conv2(x))
-            x = torch.relu(self.conv3(x))
-            x = self.pool1(x)
-
-            # 4-6层 + 池化
-            x = torch.relu(self.conv4(x))
-            x = torch.relu(self.conv5(x))
-            x = torch.relu(self.conv6(x))
-            x = self.pool2(x)
-
-            # 7-10层
-            x = torch.relu(self.conv7(x))
-            x = torch.relu(self.conv8(x))
-            x = torch.relu(self.conv9(x))
-            x = torch.relu(self.conv10(x))
-
-            # 展平 + 分类
-            x = x.view(x.size(0), -1)
-            x = torch.relu(self.fc1(x))
-            x = self.fc2(x)
-            return x
-
-    # ======================================================================
-
-    model = SimpleCNN().to(device)
+    model = CNN_GRU_Net(gru_input_size, hidden_size, num_layers, num_classes).to(device)
     criterion = nn.CrossEntropyLoss()
+    optimizer = optim.Adam(model.parameters(), lr=lr)
 
-    optimizer = optim.Adam(model.parameters(), lr=0.0005)
-
-    # 训练
-    num_epochs = 10
     print("开始训练...")
     for epoch in range(num_epochs):
         model.train()
         running_loss = 0.0
-
         for images, labels in trainloader:
             images, labels = images.to(device), labels.to(device)
             optimizer.zero_grad()
@@ -108,11 +103,10 @@ def main():
             running_loss += loss.item()
 
         avg_loss = running_loss / len(trainloader)
-        print(f'Epoch [{epoch + 1}/{num_epochs}], Loss: {avg_loss:.4f}')
+        print(f'Epoch [{epoch+1}/{num_epochs}], Loss: {avg_loss:.4f}')
 
     print('训练完成！')
 
-    # 测试
     model.eval()
     correct = 0
     total = 0
@@ -126,7 +120,6 @@ def main():
 
     accuracy = 100 * correct / total
     print(f'测试集准确率: {accuracy:.2f}%')
-
 
 if __name__ == '__main__':
     main()
